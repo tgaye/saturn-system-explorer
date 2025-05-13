@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="=device-width, initial-scale=1.0">
+    <title>Saturn System Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        .label {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 5px rgba(0, 150, 255, 0.8);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+    <div id="canvas-container"></div>
+    <div id="instructions">Drag to rotate | Scroll to zoom | Click to toggle labels</div>
+    <script>
+        const sketch = (p) => {
+            let saturn, rings, moons = [];
+            let stars = [];
+            let camX = 0, camY = 0, camZ = 800;
+            let targetX = 0, targetY = 0, targetZ = 800;
+            let rotX = 0, rotY = 0;
+            let targetRotX = 0, targetRotY = 0;
+            let isDragging = false;
+            let prevMouseX, prevMouseY;
+            let showLabels = false;
+            let labels = [];
+            let starCount = 1000;
+            let saturnTexture, ringTexture;
+            let moonTextures = [];
+            let isMobile = false;
+
+            p.preload = () => {
+                // Create procedural textures instead of loading files
+                saturnTexture = createSaturnTexture(p);
+                ringTexture = createRingTexture(p);
+                for (let i = 0; i < 4; i++) {
+                    moonTextures.push(createMoonTexture(p, i));
+                }
+            };
+
+            function createSaturnTexture(p) {
+                let g = p.createGraphics(512, 512);
+                g.background(210, 180, 140);
+                
+                // Create banding pattern
+                for (let i = 0; i < 20; i++) {
+                    let y = p.random(g.height);
+                    let h = p.random(10, 50);
+                    let col = p.color(
+                        210 + p.random(-20, 20),
+                        180 + p.random(-20, 20),
+                        140 + p.random(-20, 20)
+                    );
+                    g.noStroke();
+                    g.fill(col);
+                    g.ellipse(g.width/2, y, g.width * 1.2, h);
+                }
+                
+                // Add polar darkening
+                for (let y = 0; y < g.height; y++) {
+                    let distFromCenter = p.abs(y - g.height/2) / (g.height/2);
+                    let darken = p.map(distFromCenter, 0.7, 1, 0, 100);
+                    g.stroke(0, darken);
+                    g.line(0, y, g.width, y);
+                }
+                
+                return g;
+            }
+
+            function createRingTexture(p) {
+                let g = p.createGraphics(1024, 64);
+                g.background(0, 0);
+                
+                // Create ring bands
+                for (let i = 0; i < 500; i++) {
+                    let x = p.random(g.width);
+                    let w = p.random(1, 10);
+                    let alpha = p.random(30, 150);
+                    let col = p.color(
+                        200 + p.random(-50, 50),
+                        180 + p.random(-50, 50),
+                        150 + p.random(-50, 50),
+                        alpha
+                    );
+                    g.stroke(col);
+                    g.strokeWeight(w);
+                    g.line(x, 0, x, g.height);
+                }
+                
+                // Add gaps
+                for (let i = 0; i < 5; i++) {
+                    let x = p.random(g.width * 0.2, g.width * 0.8);
+                    let w = p.random(5, 30);
+                    g.stroke(0, 0);
+                    g.strokeWeight(w);
+                    g.line(x, 0, x, g.height);
+                }
+                
+                return g;
+            }
+
+            function createMoonTexture(p, index) {
+                let g = p.createGraphics(256, 256);
+                let baseColor;
+                
+                switch(index) {
+                    case 0: // Titan
+                        baseColor = p.color(180, 160, 140);
+                        break;
+                    case 1: // Enceladus
+                        baseColor = p.color(220, 220, 230);
+                        break;
+                    case 2: // Rhea
+                        baseColor = p.color(170, 170, 160);
+                        break;
+                    case 3: // Mimas
+                        baseColor = p.color(150, 150, 160);
+                        break;
+                }
+                
+                g.background(baseColor);
+                
+                // Create craters
+                for (let i = 0; i < 50; i++) {
+                    let x = p.random(g.width);
+                    let y = p.random(g.height);
+                    let size = p.random(5, 30);
+                    let darkness = p.random(30, 80);
+                    
+                    // Crater shadow
+                    g.noStroke();
+                    g.fill(0, darkness);
+                    g.ellipse(x, y, size, size);
+                    
+                    // Crater rim highlight
+                    g.fill(
+                        p.red(baseColor) + 30,
+                        p.green(baseColor) + 30,
+                        p.blue(baseColor) + 30
+                    );
+                    g.ellipse(x - size/4, y - size/4, size/3, size/3);
+                }
+                
+                // Special features
+                if (index === 1) { // Enceladus geysers
+                    for (let i = 0; i < 10; i++) {
+                        let x = p.random(g.width);
+                        let y = p.random(g.height);
+                        let size = p.random(3, 8);
+                        g.fill(255, 255, 255, 150);
+                        g.ellipse(x, y, size, size);
+                        g.ellipse(x + size/2, y - size/2, size/2, size/2);
+                    }
+                }
+                
+                return g;
+            }
+
+            p.setup = () => {
+                let canvas = p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
+                canvas.parent('canvas-container');
+                p.pixelDensity(1);
+                
+                isMobile = p.windowWidth < 768;
+                if (isMobile) starCount = 500;
+                
+                // Initialize stars
+                for (let i = 0; i < starCount; i++) {
+                    stars.push({
+                        x: p.random(-2000, 2000),
+                        y: p.random(-2000, 2000),
+                        z: p.random(-2000, 2000),
+                        size: p.random(0.5, 2),
+                        twinkle: p.random(0.5, 1.5)
+                    });
+                }
+                
+                // Initialize Saturn
+                saturn = {
+                    radius: 120,
+                    rotation: 0,
+                    tilt: p.radians(26.7)
+                };
+                
+                // Initialize rings
+                rings = {
+                    innerRadius: 140,
+                    outerRadius: 300,
+                    tilt: saturn.tilt,
+                    rotation: 0
+                };
+                
+                // Initialize moons
+                const moonData = [
+                    { name: "Titan", distance: 400, size: 30, speed: 0.002, phase: 0 },
+                    { name: "Enceladus", distance: 300, size: 15, speed: 0.005, phase: p.PI },
+                    { name: "Rhea", distance: 250, size: 20, speed: 0.003, phase: p.PI/2 },
+                    { name: "Mimas", distance: 200, size: 12, speed: 0.007, phase: p.PI*1.5 }
+                ];
+                
+                for (let i = 0; i < moonData.length; i++) {
+                    moons.push({
+                        ...moonData[i],
+                        angle: p.random(p.TWO_PI),
+                        texture: moonTextures[i]
+                    });
+                    
+                    // Create label elements
+                    let label = p.createDiv(moonData[i].name);
+                    label.class('label');
+                    label.parent('canvas-container');
+                    labels.push(label);
+                }
+                
+                // Set initial camera position
+                camZ = 800;
+                targetZ = 800;
+            };
+
+            p.draw = () => {
+                p.background(0);
+                
+                // Update camera position with easing
+                camX += (targetX - camX) * 0.1;
+                camY += (targetY - camY) * 0.1;
+                camZ += (targetZ - camZ) * 0.1;
+                
+                // Update rotation with easing
+                rotX += (targetRotX - rotX) * 0.1;
+                rotY += (targetRotY - rotY) * 0.1;
+                
+                // Set camera
+                p.camera(camX, camY, camZ, 0, 0, 0, 0, 1, 0);
+                
+                // Draw stars
+                drawStars();
+                
+                // Lighting
+                p.ambientLight(60);
+                p.pointLight(255, 255, 255, -1000, 0, -2000);
+                p.pointLight(200, 200, 150, 1000, 500, -1000);
+                
+                // Update Saturn rotation
+                saturn.rotation += 0.002;
+                rings.rotation += 0.001;
+                
+                // Draw Saturn
+                p.push();
+                p.rotateY(saturn.rotation);
+                p.rotateX(saturn.tilt);
+                p.noStroke();
+                p.texture(saturnTexture);
+                p.sphere(saturn.radius);
+                p.pop();
+                
+                // Draw rings
+                p.push();
+                p.rotateY(rings.rotation);
+                p.rotateX(rings.tilt);
+                p.noStroke();
+                p.texture(ringTexture);
+                p.rotateX(p.HALF_PI);
+                p.torus((rings.innerRadius + rings.outerRadius)/2, (rings.outerRadius - rings.innerRadius)/2, 64, 4);
+                p.pop();
+                
+                // Update and draw moons
+                for (let i = 0; i < moons.length; i++) {
+                    let moon = moons[i];
+                    moon.angle += moon.speed;
+                    
+                    p.push();
+                    p.rotateY(moon.angle + moon.phase);
+                    p.translate(moon.distance, 0, 0);
+                    p.rotateY(p.PI/2); // Face camera
+                    
+                    // Draw moon
+                    p.noStroke();
+                    p.texture(moon.texture);
+                    p.sphere(moon.size);
+                    
+
+                    
+                    // Special effects for Enceladus
+                    if (moon.name === "Enceladus" && p.frameCount % 3 === 0) {
+                        drawGeyserParticles(p, moon.distance, moon.angle + moon.phase, moon.size);
+                    }
+                    
+                    p.pop();
+                }
+                
+                // Draw lens flare effect for sun
+                drawLensFlare();
+            };
+
+            function drawStars() {
+                p.push();
+                p.translate(-camX, -camY, -camZ);
+                p.noStroke();
+                
+                for (let star of stars) {
+                    let twinkleFactor = p.sin(p.frameCount * 0.01 * star.twinkle) * 0.5 + 0.5;
+                    let alpha = p.map(twinkleFactor, 0, 1, 100, 255);
+                    p.fill(255, alpha);
+                    
+                    p.push();
+                    p.translate(star.x, star.y, star.z);
+                    p.sphere(star.size * twinkleFactor);
+                    p.pop();
+                }
+                
+                p.pop();
+            }
+
+            function drawGeyserParticles(p, distance, angle, moonSize) {
+                p.push();
+                p.rotateY(angle);
+                p.translate(distance, 0, 0);
+                
+                for (let i = 0; i < 3; i++) {
+                    let x = p.random(-moonSize/2, moonSize/2);
+                    let y = p.random(-moonSize/2, moonSize/2);
+                    let z = p.random(-moonSize/2, moonSize/2);
+                    let size = p.random(1, 3);
+                    let speed = p.random(0.5, 2);
+                    
+                    p.push();
+                    p.translate(x, y, z);
+                    p.fill(255, 255, 255, 150);
+                    p.sphere(size);
+                    p.pop();
+                    
+                    // Update position for next frame (simple animation)
+                    y -= speed;
+                    if (y < -moonSize * 2) y = p.random(0, moonSize/2);
+                }
+                
+                p.pop();
+            }
+
+            function drawLensFlare() {
+                // Calculate sun position (fixed at distant left)
+                let sunPos = p.createVector(-2000, 0, -2000);
+                let screenPos = worldToScreen(p, sunPos.x, sunPos.y, sunPos.z);
+                
+                if (!screenPos) return;
+                
+                let center = p.createVector(p.width/2, p.height/2);
+                let dir = p5.Vector.sub(screenPos, center);
+                let dist = dir.mag();
+                dir.normalize();
+                
+                // Only show flare when sun is roughly in view
+                if (dist < p.width * 0.8) {
+                    let flareSize = p.map(dist, 0, p.width/2, 100, 20, true);
+                    let flareAlpha = p.map(dist, p.width/4, p.width/2, 100, 0, true);
+                    
+                    p.push();
+                    p.noStroke();
+                    p.fill(255, 255, 200, flareAlpha);
+                    
+                    // Main flare
+                    p.ellipse(screenPos.x, screenPos.y, flareSize, flareSize);
+                    
+                    // Secondary flares along the line to center
+                    for (let i = 0; i < 3; i++) {
+                        let pos = p5.Vector.lerp(screenPos, center, (i+1)/4);
+                        let size = flareSize * (0.3 + i * 0.2);
+                        let alpha = flareAlpha * 0.7;
+                        p.fill(255, 255, 200, alpha);
+                        p.ellipse(pos.x, pos.y, size, size);
+                    }
+                    
+                    p.pop();
+                }
+            }
+
+            function worldToScreen(p, x, y, z) {
+                // let screenX = p.screenX(x, y, z);
+                // let screenY = p.screenY(x, y, z);
+                
+                // // Check if point is in front of camera
+                // let cameraZ = p.cameraZ;
+                // let modelZ = p.modelZ(x, y, z);
+                
+                // if (modelZ < cameraZ) {
+                //     return { x: screenX, y: screenY };
+                // }
+                return null;
+            }
+
+            p.mousePressed = () => {
+                if (p.mouseX > 0 && p.mouseX < p.width && p.mouseY > 0 && p.mouseY < p.height) {
+                    isDragging = true;
+                    prevMouseX = p.mouseX;
+                    prevMouseY = p.mouseY;
+                }
+            };
+
+            p.mouseReleased = () => {
+                isDragging = false;
+            };
+
+            p.mouseDragged = () => {
+                if (isDragging) {
+                    let dx = p.mouseX - prevMouseX;
+                    let dy = p.mouseY - prevMouseY;
+                    
+                    targetRotY += dx * 0.01;
+                    targetRotX += dy * 0.01;
+                    
+                    prevMouseX = p.mouseX;
+                    prevMouseY = p.mouseY;
+                }
+            };
+
+            p.mouseClicked = () => {
+                // Only toggle labels if not dragging
+                if (!isDragging && p.mouseX > 0 && p.mouseX < p.width && p.mouseY > 0 && p.mouseY < p.height) {
+                    showLabels = !showLabels;
+                }
+            };
+
+            p.mouseWheel = (event) => {
+                targetZ += event.delta * 0.5;
+                targetZ = p.constrain(targetZ, 300, 1500);
+                return false;
+            };
+
+            p.touchStarted = () => {
+                isMobile = true;
+                p.mousePressed();
+                return false;
+            };
+
+            p.touchMoved = () => {
+                p.mouseDragged();
+                return false;
+            };
+
+            p.touchEnded = () => {
+                p.mouseReleased();
+                return false;
+            };
+
+            p.windowResized = () => {
+                p.resizeCanvas(p.windowWidth, p.windowHeight);
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
